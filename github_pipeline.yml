@@ -1,0 +1,85 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build application
+        run: dotnet build src/BedsideStatus/BedsideStatus.csproj --configuration Release
+
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        run: dotnet test src/BedsideStatus/BedsideStatus.csproj --configuration Release
+
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build container
+        run: docker build -t bedside-status:${{ github.sha }} .
+
+      - name: Scan container with Trivy
+        run: trivy image --severity HIGH,CRITICAL bedside-status:${{ github.sha }}
+
+
+  push-image:
+    name: Push Image to ECR
+    runs-on: ubuntu-latest
+    needs: security-scan
+    steps:
+      - name: Push container image
+        run: |
+          # Assuming AWS authentication and ECR repository already exist.
+          docker tag bedside-status:${{ github.sha }} $ECR_REGISTRY/bedside-status:${{ github.sha }}
+          docker push $ECR_REGISTRY/bedside-status:${{ github.sha }}
+
+
+  deploy:
+    name: Deploy to ECS Fargate
+    runs-on: ubuntu-latest
+    needs: push-image
+    environment: production
+    steps:
+      - name: Register new task definition
+        run: |
+          # Task definition references the new image pushed to ECR.
+          aws ecs register-task-definition \
+            --cli-input-json file://deploy/task-def.json
+
+      - name: Update ECS service
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_SERVICE \
+            --task-definition $NEW_TASK_DEFINITION
+
+#rollback job to revert to the last known good task definition if deployment fails
+  rollback:
+    name: Rollback
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: failure()
+    steps:
+      - name: Roll back to previous task definition
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_SERVICE \
+            --task-definition $LAST_KNOWN_GOOD_TASK_DEFINITION
