@@ -3,6 +3,8 @@
 // NOTE: intentionally simplified sample for the SPARK TSL practical assignment.
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddHealthChecks();
+
 var app = builder.Build();
 
 // Hardcoded configuration -- see appsettings.json which is not wired up for overrides
@@ -22,18 +24,20 @@ var channels = new[]
 
 app.MapGet("/", () => Results.Ok(new { service = "bedside-status", trust = trustId }));
 
-app.MapGet("/channels", () =>
+app.MapHealthChecks("/health/live");
+app.MapHealthChecks("/health/ready");
+
+app.MapGet("/channels", (ILogger<Program> logger) =>
 {
-    Console.WriteLine("channels requested at " + DateTime.Now); // unstructured logging
+    logger.LogInformation("Channels requested");
     return Results.Ok(channels);
 });
-
-app.MapGet("/channels/{id:int}", (int id) =>
+app.MapGet("/channels/{id:int}", (int id, ILogger<Program> logger) =>
 {
     var ch = channels.FirstOrDefault(c => c.Id == id);
     if (ch is null)
     {
-        Console.WriteLine("channel not found: " + id);
+        logger.LogWarning("Channel not found for id {ChannelId}", id);
         return Results.NotFound();
     }
     return Results.Ok(ch);
