@@ -6,8 +6,11 @@ var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
 
 // Hardcoded configuration -- see appsettings.json which is not wired up for overrides
-var contentDbConnection = "Server=content-db.internal;Database=channels;User Id=svc_bedside;Password=Sup3rS3cret!;";
-var trustId = "TRUST-DEMO-001";
+var contentDbConnection =
+    builder.Configuration.GetConnectionString("ContentDb");
+
+var trustId =
+    builder.Configuration["TrustId"];
 
 var channels = new[]
 {

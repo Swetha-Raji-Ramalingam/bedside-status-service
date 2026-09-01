@@ -4,5 +4,6 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - DB_PASSWORD=Sup3rS3cret!
+      - ConnectionStrings__ContentDb=${ConnectionStrings__ContentDb}
+      - TrustId=${TrustId}
     restart: "no"
